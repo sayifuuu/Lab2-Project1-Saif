@@ -32,7 +32,7 @@ portuguese <- read_delim("student-por.csv", delim = ";")
     At this assertion, the next question that many may ask is "Then, what other factors affect academic performance?," which I'll be attempting to answer using a data set provided by [UC Irvine's Machine Learning Repository](https://archive.ics.uci.edu/). During the 2005-2006 school year, in the Alentejo (*Ah-len-TAY-zhoo*) region of Portugal, researchers Paulo Cortez and Alicia Silva collected data from Gabriela Pereira School and Mousinho de Silveira School using school reports and questionnaires. Using their results, they authored a [report](https://repositorium.uminho.pt/server/api/core/bitstreams/991a0e2b-249d-466d-afef-937d975ff7fc/content) in an attempt to develop "more efficient student prediction tools...[improve] the quality of education, and [enhance] school resource management" (Paulo, Silva).
 
 ```{r Gabriela Pereira Image, echo = FALSE, fig.align = 'center', out.width = "50%", fig.cap = "Students at Gabriel Pereira School - AEGP"}
-knitr::include_graphics("GPClass.jpg")
+knitr::include_graphics("/Users/saifu/Desktop/SDS/10.7/student/GPClass.jpg")
 ```
 
 Using [their compiled data](https://archive.ics.uci.edu/dataset/320/student+performance), I will try to answer the following questions.
