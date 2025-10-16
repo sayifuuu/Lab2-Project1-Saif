@@ -1,0 +1,245 @@
+---
+title: "Project 1"
+author: "Saif Farooq"
+date: "2025-10-10"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: True
+      smooth_scroll: True
+---
+
+```{r setup, include=FALSE}
+
+# Global Options
+
+# Packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+
+# Datasets
+math <- read_delim("student-mat.csv", delim = ";")
+portuguese <- read_delim("student-por.csv", delim = ";")
+#used "https://readr.tidyverse.org/reference/read_delim.html" to figure out that I needed to use read_delim()"
+```
+
+# Introduction
+
+    It's often the case that students and parents alike hold the belief that academic success in school is purely determined by the duration or quality of studying, when in reality, there are a plethora of other factors that can affect a student's performance. Although it's logical to assume that persistent and productive studying will always lead to better academic performance, it overlooks the fact that students' personal lives and extracurricular activities also play a key part in their will or ability to study, along with their academic performance.
+
+    At this assertion, the next question that many may ask is "Then, what other factors affect academic performance?," which I'll be attempting to answer using a data set provided by [UC Irvine's Machine Learning Repository](https://archive.ics.uci.edu/). During the 2005-2006 school year, in the Alentejo (*Ah-len-TAY-zhoo*) region of Portugal, researchers Paulo Cortez and Alicia Silva collected data from Gabriela Pereira School and Mousinho de Silveira School using school reports and questionnaires. Using their results, they authored a [report](https://repositorium.uminho.pt/server/api/core/bitstreams/991a0e2b-249d-466d-afef-937d975ff7fc/content) in an attempt to develop "more efficient student prediction tools...[improve] the quality of education, and [enhance] school resource management" (Paulo, Silva).
+
+```{r Gabriela Pereira Image, echo = FALSE, fig.align = 'center', out.width = "50%", fig.cap = "Students at Gabriel Pereira School - AEGP"}
+knitr::include_graphics("/Users/saifu/Desktop/SDS/10.7/student/GPClass.jpg")
+```
+
+Using [their compiled data](https://archive.ics.uci.edu/dataset/320/student+performance), I will try to answer the following questions.
+
+```{r link, include = FALSE}
+#used the following link to figure out how to do paragraph indents: https://steemit.com/markdown/@jamesanto/how-to-add-multiple-spaces-between-texts-in-markdown
+#used the following link for better image formatting: https://openplantpathology.github.io/rmd4sci-melbourne/figures-tables-captions-.html
+```
+
+## Research Questions
+
+> 1.  How do the **family circumstances** of secondary students at Gabriel Pereira School and Mousinho de Silveira School affect their academic performance in math and Portuguese language classes?
+
+> 2.  How do **extracurricular and social activities** of secondary students at Gabriel Pereira School and Mousinho de Silveira School relate to their academic performance?
+
+# Data Preparation
+
+```{r data, include = FALSE}
+
+#Creating merged dataset
+#(duplicate student identifiers provided by authors)
+mathport <- full_join(math, portuguese, by = c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"),
+suffix = c(".math", ".por"))
+
+#Choosing important variables
+mathport_sel <- select(mathport, G3.math, G3.por, Pstatus, famsup.math, famsup.por, famrel.math, famrel.por, activities.math, activities.por, romantic.math, romantic.por, goout.math, goout.por)
+
+#Cleaning split variables
+mathport_sel$famsup <- coalesce(mathport_sel$famsup.math, mathport_sel$famsup.por)
+mathport_sel$famrel <- coalesce(mathport_sel$famrel.math, mathport_sel$famrel.por)
+mathport_sel$activities <- coalesce(mathport_sel$activities.math, mathport_sel$activities.por)
+mathport_sel$romantic <- coalesce(mathport_sel$romantic.math, mathport_sel$romantic.por)
+mathport_sel$goout <- coalesce(mathport_sel$goout.math, mathport_sel$goout.por)
+mathport_sel$G3_avg <- coalesce(mathport_sel$G3.math, mathport_sel$G3.por)
+mathport_f <- select(mathport_sel, Pstatus, famsup, famrel, activities, romantic, goout, G3_avg)
+mathport_f$Pstatus[mathport_f$Pstatus == "A"] <- "Apart"
+mathport_f$Pstatus[mathport_f$Pstatus == "T"] <- "Together"
+
+#used the following link to look at functions for full join https://www.rdocumentation.org/packages/joyn/versions/0.2.4/topics/full_join
+#used the following link to learn about merging with coalesce https://www.r-bloggers.com/2023/05/replace-missing-value-from-other-columns-using-coalesce-join-in-dplyr/
+```
+
+    After downloading the data set from the aforementioned UCI Machine Learning Repository and making initial observations, one of the earliest problems I faced was trying to import it properly. After some difficulty in understanding the file type and function, I discovered that it'd be best to read the provided data sets with "delim()" so that it could load properly and be ready for alteration and analysis.
+
+    Additionally, the biggest problems I faced resulted from a small note left by the authors stating that both data sets contained duplicate students. This was an issue since I planned on merging the data sets from the beginning to analyze the average of the variables. Fortunately, the authors provided a line of code that helped me determine what observational units were duplicates and how many of them there were, so I was able to use the "full_join()" function to combine the two data sets according to the given criteria. I then filtered for the needed variables but then experienced some more difficulty since there were 2 columns for 5/8 of the variables I was analyzing since they were not part of the defining criteria. Ultimately, I ended up consolidating the variables that had been affected by the original merge using the "coalesce()" function and then further filtered to organize the final data set.
+
+# Variable Descriptions
+
+```{r vardesc, echo = FALSE}
+vardesc <- tibble(
+  variable = c("Pstatus", "famsup", "famrel", "activities", "romantic", "goout", "G3_avg"), 
+  type = c("Categorical", "Categorical", "Numeric", "Categorical", "Categorical", "Categorical", "Numeric"),
+  desc. = c("parent's cohabitation status", "family educational support", "quality of family relationships", "extra-curricular activities", "in romantic relationship", "frequency of going out with friends", "average of all grades in Portuguese and Math"), 
+  values = c("together/apart", "Y/N", "1-5", "Y/N", "Y/N", "1-5", "1-20"))
+print(vardesc)
+```
+
+# Analysis
+
+First, before seeing how these variables interact with academic performance, I believe it's important to at least view the distribution of the grades themselves.
+
+```{r grade, echo = FALSE}
+#Hist
+ggplot(mathport_f, aes(x = G3_avg)) + geom_histogram(binwidth = 1, boundary = 0) +
+  labs(title = "Distribution of Final Grades in Portuguese and Math",
+       x = "Final Grades (pts.)", y = "# of Students")
+```
+
+The distribution of grades is very slightly left skewed as can been seen above. The median final grade is [`r median(mathport_f$G3_avg)`]{style="color: blue;"} and the IQR (Inter-Quartile Range), which represents the range of the center 50% of the data, is [`r IQR(mathport_f$G3_avg)`]{style="color: red;"}. This illustrates that most students are getting between grades of between 9 and 13 out of 20. On an American grade scale, this would be between **45** and **65** out of 100. Notably, a considerable amount of students have failed completely.
+
+## Analyses of the Effect of Family Circumstances
+
+For this analysis, we'll be considering the variables "pstatus", "famsup", "famrel", and their relation to "G3" with specific emphasis on "famrel". Many studies like [this one](https://pmc.ncbi.nlm.nih.gov/articles/PMC9243415/) from the National Library of Medicine have determined and underlined the efficacy of unhealthy family relationships in lowering academic performance due to a variety of psycho-physiological causes.
+
+```{r Pstatus, echo = FALSE}
+ggplot(mathport_f, aes(x = Pstatus)) + geom_bar(fill = "steelblue") +
+  labs(title = "Parental Cohabitation Status Among Students", 
+       x = "Parents Living Together", y = "# of Students")
+```
+
+Based on the calculated data, there were [`r sum(mathport_f$Pstatus == "Together")`]{style="color: blue;"} students whose parents live together and [`r sum(mathport_f$Pstatus == "Apart")`]{style="color: red;"} students whose parents live separately.
+
+```{r famsup, echo = FALSE}
+ggplot(mathport_f, aes(x = famsup)) + geom_bar(fill = "darkseagreen") +
+  labs(title = "Access to Family Educational Support Among Students",
+       x = "Family Educational Support", y = "# of Students")
+```
+
+Based on the calculated data, there were [`r sum(mathport_f$famsup == "yes")`]{style="color: blue;"} students who received educational support from their family and [`r sum(mathport_f$famsup == "no")`]{style="color: red;"} students who didn't.
+
+```{r famrel, echo = FALSE}
+ggplot(mathport_f, aes(x = famrel)) + geom_histogram(binwidth = 0.9, boundary = 0, fill = "red4", color = "black") +
+  labs(title = "Family Relationship Quality Among Students",
+       x = "Family Relationship Quality Level", y = "# of Students")
+```
+
+The distribution of grades is left skewed, as can been seen above. The median final grade is [`r median(mathport_f$famrel)`]{style="color: blue;"} and the IQR is [`r IQR(mathport_f$famrel)`]{style="color: red;"}. This shows that most students generally have positive relationships with their family members.
+
+```{r Pstatus vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = Pstatus, y = G3_avg)) + geom_boxplot(fill = "skyblue2") +
+  labs(title = "Average Grade by Parental Cohabitation",
+       x = "Parents Cohabitation Status", y = "Average Final Grade")
+```
+
+According to the graph, the median grade of students whose parents live apart is [`r median(mathport_f$G3_avg[mathport_f$Pstatus=="Apart"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$Pstatus=="Apart"])`]{style="color: red;"}. For students whose parents live together, the median grade is [`r median(mathport_f$G3_avg[mathport_f$Pstatus=="Together"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$Pstatus=="Together"])`]{style="color: red;"}. Unexpectedly, this shows that students' average grades appear almost identical regardless of whether their parents lived together or apart.
+
+```{r famsup vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = famsup, y = G3_avg)) + geom_boxplot(fill = "darkseagreen4") +
+  labs(title = "Average Grade by Family Educational Support",
+       x = "Family Educational Support", y = "Average Final Grade")
+```
+
+According to the graph, the median grade of students who don't receive educational support from their family is [`r median(mathport_f$G3_avg[mathport_f$famsup=="no"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$famsup=="no"])`]{style="color: red;"}. For students who do receive that support, the median grade is [`r median(mathport_f$G3_avg[mathport_f$famsup=="yes"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$famsup=="yes"])`]{style="color: red;"}. Again, unexpectedly, this shows that family educational support did not have much bearing on students' grades, but strangely, students without educational support had slightly more positive variability.
+
+```{r famrel vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = as.factor(famrel), y = G3_avg)) + geom_boxplot(fill = "brown") +
+  labs(title = "Average Grade by Family Relationship Quality",
+       x = "Family Relationship Quality Level", y = "Average Final Grade")
+```
+
+According to the result of the graph, the grades of each student depending on how they rated their family relationships can be seen below.
+
+```{r famrel results, echo = FALSE}
+famrel_summary <- summarise(group_by(mathport_f, famrel),median = median(G3_avg),IQR = IQR(G3_avg))
+print(famrel_summary)
+```
+
+This shows that grades are generally consistent across all family relationships. However, as can be seen in the graph and chart, there appears to be a slight positive correlation between better family relationships and higher academic performance.
+
+## Analyses of the Effect of Extracurricular and Social Activities
+
+```{r activity, echo = FALSE}
+ggplot(mathport_f, aes(x = activities)) + geom_bar(fill = "royalblue") +
+  labs(title = "Participation in Extracurricular Activities Among Students",
+       x = "Activities", y = "# of Students")
+```
+
+Based on the calculated data, there were [`r sum(mathport_f$activities == "yes")`]{style="color: blue;"} students who did participate in after-school extracurricular activities and [`r sum(mathport_f$activities == "no")`]{style="color: red;"} students who didn't.
+
+```{r romance, echo = FALSE}
+ggplot(mathport_f, aes(x = romantic)) + geom_bar(fill = "seagreen") +
+  labs(title = "Romantic Relationship Status Among Students",
+       x = "In Romantic Relationship", y = "# of Students")
+```
+
+Based on the calculated data, there were [`r sum(mathport_f$romantic == "yes")`]{style="color: blue;"} students who were in romantic relationships and [`r sum(mathport_f$romantic == "no")`]{style="color: red;"} students who weren't.
+
+```{r going out, echo = FALSE}
+ggplot(mathport_f, aes(x = goout)) + geom_histogram(binwidth = 0.85, boundary = 0, fill = "brown4", color = "black") +
+  labs(title = "Frequency Distribution of Going Out with Friends Among Students",
+       x = "Frequency of Going Out w/ Friends", y = "# of Students")
+```
+
+The distribution of grades is symmetric, as can been seen above. The mean of the frequency here is [`r round(mean(mathport_f$goout),3)`]{style="color: blue;"} and the standard deviation, or the average number by which other values deviate from the mean, is [`r round(sd(mathport_f$goout),)`]{style="color: red;"}. This illustrates that typically, most students at GP and MS go out with their friends an average amount.
+
+```{r activities vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = activities, y = G3_avg)) + geom_boxplot(fill = "royalblue") +
+  labs(title = "Average Grade by Extracurricular Activity Participation",
+       x = "Activities", y = "Average Final Grade")
+```
+
+According to the graph, the median grade of students who didn't participate in extracurricular activities is [`r median(mathport_f$G3_avg[mathport_f$activities=="no"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$activities=="no"])`]{style="color: red;"}. For students who did, the median grade is [`r median(mathport_f$G3_avg[mathport_f$activities=="yes"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$activities=="yes"])`]{style="color: red;"}. This illustrates that there is a slightly positive correlation between students' who do participate in extracurricular activities and higher academic performance.
+
+```{r romantic vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = romantic, y = G3_avg)) + geom_boxplot(fill = "seagreen") +
+  labs(title = "Average Grade by Romantic Relationship Status",
+       x = "In Romantic Relationship", y = "Average Final Grade")
+```
+
+According to the graph, the median grade of students who didn't claim to be in a romantic relationship is [`r median(mathport_f$G3_avg[mathport_f$romantic=="no"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$romantic=="no"])`]{style="color: red;"}. For students who did, the median grade is [`r median(mathport_f$G3_avg[mathport_f$romantic=="yes"])`]{style="color: red;"} and the IQR is [`r IQR(mathport_f$G3_avg[mathport_f$romantic=="yes"])`]{style="color: red;"}. Although grades appear to be around the same, this shows that students who aren't in relationships have slightly more positive variability associated with higher grades.
+
+```{r goout vs G3_avg, echo = FALSE}
+ggplot(mathport_f, aes(x = as.factor(goout), y = G3_avg)) + geom_boxplot(fill = "brown4") +
+  labs(title = "Average Grade by Frequency of Going Out",
+       x = "Frequency of Going Out w/ Friends", y = "Average Final Grade")
+```
+
+According to the result of the graph, the grades of each student depending on how often they claimed to go out with their friends can be seen below.
+
+```{r goout results, echo = FALSE}
+goout_summary <- summarise(group_by(mathport_f, goout),median = median(G3_avg),IQR = IQR(G3_avg))
+print(goout_summary)
+```
+
+This again shows that grades are generally consistent with the frequency of going out with friends. However, it appears that students who do stay at home and presumably study, have slightly higher grades than their peers who don't. Although, it does show that students who don't go out at all still receive average grades.
+
+# Choice Elements
+
+-   **Floating table of contents** is included in the top left section of the HTML page. **(ex: lines 6-10)**
+-   **Merging data sets** and process is included in data preparation section. I combined data sets "math" and "portuguese". **(ex: lines 55-58)**
+-   **Hyperlinks** are included in the introduction and conclusion. **(exs: line 32 {report}, line 108 {this one})**
+-   **In-line code** is included in all graph descriptions. **(exs: line 104, line 116, line 124, 132, line 204)**
+-   **Font coloring** is included in all graph descriptions along with the in-line coding. **(ex: line 106)**
+
+```{r citation, include = FALSE}
+#used the following link to learn font-coloring https://bookdown.org/yihui/rmarkdown-cookbook/font-color.html
+```
+
+# Conclusion
+
+After examining the data, it appears that family circumstances, such as whether parents live together, the presence of family educational support, and the quality of family relationships, have a relatively modest effect on students' academic performance in math and Portuguese. Similarly, students’ engagement in extracurricular and social activities, including participation in after-school activities, romantic relationships, and the frequency of going out with friends, does not seem to substantially influence their final grades, suggesting that these personal and social factors may play a smaller role than commonly assumed.
+
+However, I think it's important to consider the scope and context of the data in this regard and I suggest that more information be collected across a variety of schools in different regions for the results to be more conclusive. In addition to that, I think it'd be interesting to further research why students who don't receive educational support from their family have slightly higher grade.
+
+# References
+
+-   Cortez, Paulo, and Alice Silva. “Using Data Mining to Predict Secondary School Student Performance.” *Repositorium*, repositorium.uminho.pt/server/api/core/bitstreams/991a0e2b-249d-466d-afef-937d975ff7fc/content. Accessed 7 Oct. 2025.
+-   Cortez, Paulo. "Student Performance." UCI Machine Learning Repository, 2008, <https://doi.org/10.24432/C5TG7T>. Accessed 7 Oct. 2025.
+-   Deng, Yuwei, et al. “Family and Academic Stress and Their Impact on Students’ Depression Level and Academic Performance.” Frontiers in Psychiatry, U.S. National Library of Medicine, 16 June 2022, pmc.ncbi.nlm.nih.gov/articles/PMC9243415/.
+-   “Interescolas de Jogos Matemáticos.” *AEGP*, 22 Mar. 2019, <https://aegp.edu.pt/web/pt-pt/interescolas-de-jogos-matematicos>. Accessed 7 Oct. 2025.
